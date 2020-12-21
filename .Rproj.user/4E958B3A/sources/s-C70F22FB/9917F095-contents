@@ -1,0 +1,400 @@
+####### Functional diversity metrics using kernel density n-dimensional hypervolumes #######
+
+# Stefano Mammola (1,2), Pedro Cardoso (2)
+
+# 1) Molecular Ecology Group (MEG), IRSA –Water Research Institute, Consiglio Nazionale delle Ricerche, Verbania, Italy
+# 2) Laboratory for Integrative Biodiversity Research (LIBRe), Finnish Museum of Natural History, University of Helsinki, Finland
+
+## Example analysis on FD using the kernel-based functions
+
+# The example is based on the study:
+# Piano, E., Giuliano, D., & Isaia, M. (2020). Islands in cities: urbanization and fragmentation drive taxonomic and functional variation in ground arthropods. Basic and Applied Ecology, https://doi.org/10.1016/j.baae.2020.02.001
+
+#################################################################
+
+set.seed(118)
+
+#################################################################
+## Loading R packages
+
+library("BAT") #version 2.0.1 #update.packages("BAT") #<--- check out that you have the version 2.0.1
+library("FD") #version 1.1-12
+library("ggplot2")
+library("gridExtra")
+library("labdsv")
+library("hypervolume") #version 2.0.11
+library("psych")
+library("StatMatch")
+library("TPD") #version 1.1.0
+
+#################################################################
+## Loading the databases and preparing the data
+
+# setwd("/Users/stefanomammola/Desktop/NEW FUNCTIONS/test db")
+
+comm2 <- read.table("./data/raw/mammola_cardoso_2020_BAT/comm.txt")
+traits2 <- read.table("./data/raw/mammola_cardoso_2020_BAT/traits.txt")
+
+str(comm2) ## structure of comm database
+urb <- comm2$Connection ## connection of the plot with the sourrounding matrix
+comm <- comm2[,2:67] ## selecting species
+
+str(traits2) ## structure of trait database
+traits <- traits2[,c(1,3,4)] ## selecting relevant traits
+
+## Converting traits to a distance matrix (gower distance) and transforming them with a PCoA
+gower.mat_spider <- StatMatch::gower.dist(traits)
+euc.pco <- labdsv::pco(gower.mat_spider,k=3)
+
+barplot(euc.pco$eig)
+(euc.pco$eig[1]+euc.pco$eig[2]+euc.pco$eig[3])/sum(euc.pco$eig[euc.pco$eig > 0]) #0.955 variance explained by first 3 axes
+
+traits <- euc.pco$points
+row.names(traits) <- row.names(traits2)
+
+#################################################################
+## Calculating the functional alpha diversity of each plot using the kernel.alpha function
+
+kernelFD <- kernel.alpha(comm=comm,trait=traits,abund=TRUE,method="gaussian",return.hv=TRUE) 
+#abund= TRUE because samples are abundances
+#return.hv= TRUE so to save the hypervolumes for subsequent analyses
+
+results <- data.frame(Plot_type=as.character(urb),Richness=as.numeric(kernelFD[[1]])) ##extracting the functional data
+
+#################################################################
+## extracting the hypervolumes...
+hv <- kernelFD[[2]] 
+# rm(kernelFD)
+
+# and visualize the hypervolumes
+hv_isolated <-  hypervolume_join(hv@HVList[results$Plot_type == "Isolated"])
+hv_connected <- hypervolume_join(hv@HVList[results$Plot_type == "Connected"])
+  
+#plot of all hypervolumes in isolated subplot
+plot(hv_isolated,
+     show.3d=FALSE,
+     show.random=TRUE,
+     show.density=TRUE,
+     show.data=TRUE,
+     show.centroid=FALSE,
+     cex.centroid=2,
+     point.alpha.min=0.2, 
+     point.dark.factor=0.7,
+     cex.random=0.5,
+     cex.data=1,
+     contour.lwd=0.1,
+     num.points.max.random = 2000,
+     col= rep("#56B4E9",30),
+     names=c("PCoA_1","PCoA_2","PCoA_3"))
+
+#plot of all hypervolumes in connceted subplot
+plot(hv_connected,
+     show.3d=FALSE,
+     show.random=TRUE,
+     show.density=TRUE,
+     show.data=TRUE,
+     show.centroid=FALSE,
+     cex.centroid=2,
+     point.alpha.min=0.2, 
+     point.dark.factor=0.7,
+     cex.random=0.5,
+     cex.data=1,
+     contour.lwd=0.1,
+     num.points.max.random = 2000,
+     col= rep("#E69F00",30),
+     names=c("PCoA_1","PCoA_2","PCoA_3"))
+
+#################################################################
+## Calculating the functional dispersion of each plot using the kernel.dispersion function
+
+dispersion <- kernel.dispersion(comm=hv,frac=0.1,func='dissimilarity') ## now I can use the hv I created with kernel.alpha, I don't have to construct them again
+dispersion_divergence <- kernel.dispersion(comm=hv,frac=0.6, func='divergence')
+
+results <- data.frame(results,Dispersion=dispersion,Dispersion_div=dispersion_divergence)
+
+## No difference in dispersion between is isolated vs connected subplots
+t.test(results$Dispersion~ results$Plot_type) 
+
+#################################################################
+## Calculating the functional evenness of each plot using the kernel.alpha function
+
+evenness <- kernel.evenness(comm=hv)
+
+results <- data.frame(results,Evenness=evenness)
+
+## No difference in evenness between isolated vs connected subplots
+t.test(results$Evenness~ results$Plot_type) 
+
+# MODIFIED BY MAS ################################################################
+## Calculating the functional richness of each plot using the kernel.alpha function
+
+evenness <- kernel.(comm=hv)
+
+results <- data.frame(results,Evenness=evenness)
+
+## No difference in evenness between isolated vs connected subplots
+t.test(results$Evenness~ results$Plot_type) 
+
+#################################################################
+## Calculating the functional beta diversity between community of the two types of plots
+beta_iso <- kernel.beta(comm= hv_isolated) 
+beta_con <- kernel.beta(comm= hv_connected)
+
+# Storing beta values of isolated and connected
+betaFD <- data.frame(
+  Beta=c(as.vector(beta_iso[[1]]),as.vector(beta_con[[1]])),
+  Connectivity=c(rep("Isolated",length(as.vector(beta_iso[[1]]))),
+                 rep("Connected",length(as.vector(beta_con[[1]])))))
+
+betaFD_2 <- data.frame(
+  Beta=c(as.vector(beta_iso[[2]]),as.vector(beta_con[[2]])),
+  Connectivity=c(rep("Isolated",length(as.vector(beta_iso[[1]]))),
+                 rep("Connected",length(as.vector(beta_con[[1]])))))
+
+betaFD_3 <- data.frame(
+  Beta=c(as.vector(beta_iso[[3]]),as.vector(beta_con[[3]])),
+  Connectivity=c(rep("Isolated",length(as.vector(beta_iso[[1]]))),
+                 rep("Connected",length(as.vector(beta_con[[1]])))))
+
+#################################################################
+##  Calculating contribution of each species
+
+contribution <- kernel.contribution(comm=comm, trait=traits, abund=TRUE, method="box") #box for a fast screening
+
+#average contribution of each species
+
+contribution_iso <- contribution[results$Plot_type == "Isolated",]
+contribution_con <- contribution[results$Plot_type == "Connected",]
+
+Cont_iso <- NULL
+for (i in 1:ncol(contribution_iso)) {
+  Cont_iso <- c(Cont_iso,mean(contribution_iso[,i],na.rm=TRUE))
+}
+
+Cont_con <- NULL
+for (i in 1:ncol(contribution_con)) {
+  Cont_con <- c(Cont_con,mean(contribution_con[,i],na.rm=TRUE))
+}
+
+## Note that contribution in an hypervolume context can be negative...
+
+results_contribution <- rbind(Cont_iso,Cont_con)
+colnames(results_contribution) <- colnames(comm)
+
+## 
+max(results_contribution[1,],na.rm=TRUE) # On average, Nurscia_albomaculata is the most contributing species in Isolated plots
+
+max(results_contribution[2,],na.rm=TRUE) # On average, Micaria_coarctata  is the most contributing species in Connected plots
+
+#################################################################
+##  Calculating Originality of each species
+
+originality <- kernel.originality(comm=comm, trait=traits, abund=TRUE, method="box", frac=0.05) #box for a fast screening
+
+## average originality of each species
+
+originality_iso <- originality[results$Plot_type == "Isolated",]
+originality_con <- originality[results$Plot_type == "Connected",]
+
+Ory_iso <- NULL
+for (i in 1:ncol(originality_iso)) {
+  Ory_iso <- c(Ory_iso,mean(originality_iso[,i],na.rm=TRUE))
+}
+
+Ory_con <- NULL
+for (i in 1:ncol(originality_con)) {
+  Ory_con <- c(Ory_con,mean(originality_con[,i],na.rm=TRUE))
+}
+
+results_originality <- rbind(Ory_iso,Ory_con)
+colnames(results_originality) <- colnames(comm)
+
+#how many species in isolated plots have higher values than connected plot?
+sum(results_originality[1,] > results_originality[2,],na.rm=TRUE) #9
+#out of
+length(results_originality[2,]) #66
+
+#################################################################
+## PLotting results ##
+
+p1 <- ggplot(results ,aes(x=Plot_type,y=Richness,fill=Plot_type)) + 
+  geom_boxplot()+
+  xlab("")+
+  ylab("α Functional diversity")+
+  labs(title="a", subtitle = "Functional richness of the communities")+
+  geom_jitter(col="grey50",shape=16, position=position_jitter(0.2))+
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))+
+  theme_bw()+
+  theme(legend.position = "none",plot.title = element_text(face="bold"))
+
+p2 <- ggplot(results,aes(x=Plot_type,y=Dispersion_div,fill=Plot_type)) + 
+  geom_boxplot()+
+  xlab("")+
+  ylab("Functional dispersion")+
+  labs(title="b", subtitle = "Functional dispersion of the communities")+
+  geom_jitter(col="grey50",shape=16, position=position_jitter(0.2))+
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))+
+  theme_bw()+
+  theme(legend.position = "none",plot.title = element_text(face="bold"))
+
+p3 <- ggplot(results,aes(x=Plot_type,y=Evenness,fill=Plot_type)) + 
+  geom_boxplot()+
+  xlab("")+
+  ylab("Functional evenness")+
+  geom_jitter(col="grey50",shape=16, position=position_jitter(0.2))+
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))+
+  labs(title="c", subtitle = "Functional evenness of the communities")+
+  theme_bw()+
+  theme(legend.position = "none",plot.title = element_text(face="bold"))
+
+p4 <- ggplot(betaFD, aes(Beta, fill=Connectivity)) + 
+  geom_density(alpha=.3) + 
+  xlab("βtotal (βreplacement +  βrichness)") +
+  ylab("Density")+
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))+
+  labs(title="d", subtitle = "Total functional dissimilarity between communities")+
+  theme_bw()+
+  theme(legend.position = c(0.3, 0.6), legend.box.background = element_rect(colour = "black"),plot.title = element_text(face="bold"))
+
+p5 <- ggplot(betaFD_2, aes(Beta, fill=Connectivity)) + 
+  geom_density(alpha=.3) + 
+  xlab("βreplacement") +
+  ylab("Density")+
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))+
+  labs(title="e", subtitle = "Differences due to replacement of functional space")+
+  theme_bw()+
+  theme(legend.position = "none",plot.title = element_text(face="bold"))
+
+p6 <- ggplot(betaFD_3, aes(Beta, fill=Connectivity)) + 
+  geom_density(alpha=.3) + 
+  xlab("βrichness") +
+  ylab("Density")+
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"))+
+  labs(title="f", subtitle = "Differences in the amount of functional space enclosed")+
+  theme_bw()+
+  theme(legend.position = "none",plot.title = element_text(face="bold"))
+
+# arrange plot in a plate
+grid.arrange(p1,p2,p3,p4,p5,p6,nrow=2)
+
+#################################################################
+## Correlation among indexes
+
+# Indexes at the community-level (alpha, dispersion, evenness)
+
+dev.off()
+par(mfrow=c(1,3),mar=rep(2,4))
+dotchart(results$Richness,main="Richness") #ok
+dotchart(results$Dispersion,main="Dispersion") #ok
+dotchart(results$Evenness,main="Evenness") #ok
+
+dev.off()
+par(mfrow=c(1,1),mar=rep(2,4))
+psych::pairs.panels(results[,c(2,4,5)],
+                    smooth=FALSE,
+                    lm=TRUE,
+                    hist.col="lightcyan2",
+                    smoother=FALSE,
+                    density=FALSE,
+                    ellipses=TRUE,
+                    method="pearson",
+                    stars=FALSE,
+                    ci=TRUE,
+                    col="grey50",
+                    rug=FALSE,
+                    cex.cor=0.6)
+
+# Indexes at the species level (originality and contribution)
+
+Contrib_cor <- data.frame(Contribution = c(Cont_con,Cont_iso), Originality = c(Ory_con,Ory_iso))
+dev.off()
+par(mfrow=c(1,2),mar=rep(2,4))
+dotchart(Contrib_cor$Contribution,main="Contribution") #2 ouliers
+dotchart(Contrib_cor$Originality,main="Originality") #ok
+
+#removing two outliers from contribution
+
+Contrib_cor <- Contrib_cor[Contrib_cor$Contribution > -0.2 & Contrib_cor$Contribution < 0.2,]
+
+dev.off()
+par(mfrow=c(1,1),mar=rep(2,4))
+psych::pairs.panels(Contrib_cor,
+                    smooth=FALSE,
+                    lm=TRUE,
+                    hist.col="lightcyan2",
+                    smoother=FALSE,
+                    density=FALSE,
+                    ellipses=TRUE,
+                    method="pearson",
+                    stars=FALSE,
+                    ci=TRUE,
+                    col="grey50",
+                    rug=FALSE,
+                    cex.cor=0.6)
+
+#################################################################
+## Comparison with other packages (FD, TPD)
+
+## TPD Package
+bw <- diag(sqrt(Hpi.diag(traits)))
+bwMat <- matrix(rep(bw, nrow(traits)), ncol=ncol(traits))
+TPDspecies <- TPDsMean(species = rownames(traits),
+                       means = traits,
+                       sds = bwMat)
+TPDcomm <- TPDc(TPDs = TPDspecies, sampUnit = comm)
+RENDComm <- REND(TPDcomm)
+TPDDiss <- dissim(TPDcomm)
+
+## FD Package
+spNP <- which(colSums(comm) == 0)
+comm2 <- comm[, -spNP]
+traits2 <- traits[-spNP, ]
+FDRes <- dbFD(x = traits2, a = comm2)
+
+### Plotting the results
+
+Richness_correlation <- data.frame(BAT= results$Richness, FD=FDRes$FRic, TPD=RENDComm$communities$FRichness)
+Dispersion_correlation <- data.frame(BAT= results$Dispersion_div, FD=FDRes$FDis, TPD=RENDComm$communities$FDivergence)
+Evenness_correlation <- data.frame(BAT= results$Evenness, FD=FDRes$FEve, TPD=RENDComm$communities$FEvenness)
+
+psych::pairs.panels(Richness_correlation,
+                    smooth=FALSE,
+                    lm=TRUE,
+                    hist.col="darkmagenta",
+                    smoother=FALSE,
+                    density=FALSE,
+                    ellipses=TRUE,
+                    method="pearson",
+                    stars=FALSE,
+                    ci=TRUE,
+                    col="grey50",
+                    rug=FALSE,
+                    cex.cor=0.6)
+
+psych::pairs.panels(Evenness_correlation,
+                    smooth=FALSE,
+                    lm=TRUE,
+                    hist.col="deepskyblue4",
+                    smoother=FALSE,
+                    ellipses=TRUE,
+                    density=FALSE,
+                    method="pearson",
+                    stars=FALSE,
+                    ci=TRUE,
+                    col="grey50",
+                    rug=FALSE,
+                    cex.cor=0.6)
+
+psych::pairs.panels(Dispersion_correlation,
+                    smooth=FALSE,
+                    lm=TRUE,
+                    hist.col="darkorange2",
+                    density=FALSE,
+                    smoother=FALSE,
+                    ellipses=TRUE,
+                    method="pearson",
+                    stars=FALSE,
+                    ci=TRUE,
+                    col="grey50",
+                    rug=FALSE,
+                    cex.cor=0.6)

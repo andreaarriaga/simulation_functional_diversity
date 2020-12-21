@@ -1,0 +1,28 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1608569635829.000,
+    "dirty" : true,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "485687F2",
+    "lastKnownWriteTime" : 1608576192,
+    "last_content_update" : 1608576332461,
+    "path" : "~/Documentos/simulation_functional_diversity/scripts/simulation.Rmd",
+    "project_path" : "scripts/simulation.Rmd",
+    "properties" : {
+        "chunk_output_type" : "console",
+        "cursorPosition" : "112,0",
+        "last_setup_crc32" : "C70F22FB3be1e79b",
+        "scrollLine" : "88",
+        "tempName" : "Untitled1"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}
